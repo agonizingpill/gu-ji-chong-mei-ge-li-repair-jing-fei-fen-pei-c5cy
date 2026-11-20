@@ -2,7 +2,7 @@ from datetime import datetime,timezone
 from sqlalchemy import Integer,String,Float,ForeignKey,UniqueConstraint,CheckConstraint,JSON,DateTime,Boolean
 from sqlalchemy.orm import Mapped,mapped_column
 from .database import Base
-from .constants import FolioState,PlanState
+from .constants import FolioState,PlanState,ReductionState
 def now():return datetime.now(timezone.utc)
 class User(Base):
     __tablename__='users'
@@ -88,6 +88,34 @@ class Encumbrance(Base):
     amount_cents:Mapped[int]=mapped_column(Integer)
     actual_cents:Mapped[int|None]=mapped_column(Integer,nullable=True)
     status:Mapped[str]=mapped_column(String(20),default='held')
+class Reduction(Base):
+    # 一次性临时减拨：提出时冻结预案，确认时按最新数据重算并落账。
+    __tablename__='reductions'
+    __table_args__=(CheckConstraint('target_cents >= 0'),CheckConstraint('previous_budget_cents >= 0'),)
+    id:Mapped[int]=mapped_column(primary_key=True)
+    grant_id:Mapped[int]=mapped_column(ForeignKey('grants.id'))
+    target_cents:Mapped[int]=mapped_column(Integer)
+    previous_budget_cents:Mapped[int]=mapped_column(Integer)
+    floor_cents:Mapped[int]=mapped_column(Integer,default=0)
+    available_cents:Mapped[int]=mapped_column(Integer,default=0)
+    status:Mapped[str]=mapped_column(String(20),default=ReductionState.pending.value)
+    reason:Mapped[str]=mapped_column(String(200),default='')
+    recomputed:Mapped[bool]=mapped_column(Boolean,default=False)
+    created_by:Mapped[str]=mapped_column(String(40),default='')
+    created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now)
+    confirmed_at:Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True)
+class ReductionItem(Base):
+    # 减拨预案中的逐方案取舍：protected 为已签证占款，kept 为整笔保留，returned 为退回草案。
+    __tablename__='reduction_items'
+    id:Mapped[int]=mapped_column(primary_key=True)
+    reduction_id:Mapped[int]=mapped_column(ForeignKey('reductions.id'))
+    treatment_id:Mapped[int]=mapped_column(ForeignKey('treatments.id'))
+    accession_id:Mapped[int]=mapped_column(ForeignKey('accessions.id'))
+    observation_id:Mapped[int|None]=mapped_column(ForeignKey('observations.id'),nullable=True)
+    amount_cents:Mapped[int]=mapped_column(Integer)
+    risk:Mapped[str]=mapped_column(String(20),default='high')
+    protected:Mapped[bool]=mapped_column(Boolean,default=False)
+    decision:Mapped[str]=mapped_column(String(20),default='protected')
 class Handover(Base):
     __tablename__='handovers'
     id:Mapped[int]=mapped_column(primary_key=True)

@@ -6,7 +6,7 @@ from .models import *
 from .schemas import *
 from .auth import current,editor,supervisor,issue,password_hash
 from .common import dump
-from . import catalog_service as catalog,isolation_service as isolation,risk_service as risk,treatment_service as treatment,grant_service as grant,handover_service as handovers
+from . import catalog_service as catalog,isolation_service as isolation,risk_service as risk,treatment_service as treatment,grant_service as grant,handover_service as handovers,reduction_service as reduction
 router=APIRouter()
 @router.post('/auth/login')
 def login(data:Login,db=Depends(session)):
@@ -15,7 +15,7 @@ def login(data:Login,db=Depends(session)):
     return {'token':issue(user),'username':user.username,'role':user.role}
 @router.get('/workspace')
 def workspace(db=Depends(session),user=Depends(current)):
-    models=[Accession,Observation,Cabinet,Isolation,RiskAssessment,Treatment,Step,Grant,Encumbrance,Handover]
+    models=[Accession,Observation,Cabinet,Isolation,RiskAssessment,Treatment,Step,Grant,Encumbrance,Reduction,ReductionItem,Handover]
     return {m.__tablename__:[dump(v) for v in db.scalars(select(m).order_by(m.id))] for m in models}
 @router.get('/audit')
 def audits(db=Depends(session),user=Depends(supervisor)):return [dump(v) for v in db.scalars(select(Audit).order_by(Audit.id.desc()).limit(100))]
@@ -45,5 +45,11 @@ def create_grant(data:GrantInput,db=Depends(session),user=Depends(supervisor)):r
 def fund(id:int,data:FundInput,db=Depends(session),user=Depends(supervisor)):return grant.fund(db,id,data,user)
 @router.post('/treatments/{id}/settle')
 def settle(id:int,data:SettleInput,db=Depends(session),user=Depends(supervisor)):return grant.settle(db,id,data,user)
+@router.post('/grants/{id}/reductions')
+def request_reduction(id:int,data:ReductionInput,db=Depends(session),user=Depends(supervisor)):return reduction.request_reduction(db,id,data,user)
+@router.get('/grants/{id}/reductions')
+def list_reductions(id:int,db=Depends(session),user=Depends(supervisor)):return reduction.list_for_grant(db,id)
+@router.post('/reductions/{id}/confirm')
+def confirm_reduction(id:int,db=Depends(session),user=Depends(supervisor)):return reduction.confirm(db,id,user)
 @router.post('/handovers')
 def handover(data:HandoverInput,db=Depends(session),user=Depends(supervisor)):return handovers.handover(db,data,user)

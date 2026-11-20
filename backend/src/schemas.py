@@ -42,6 +42,8 @@ class FundInput(BaseModel):
     grant_id:int
 class SettleInput(BaseModel):
     actual_cents:int=Field(gt=0)
+class ReductionInput(BaseModel):
+    target_cents:int=Field(ge=0,le=1000000000)
 class HandoverInput(BaseModel):
     accession_id:int
     kind:str=Field(pattern='^(storage|exhibition)$')

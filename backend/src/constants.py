@@ -13,3 +13,7 @@ class PlanState(StrEnum):
     funded='funded'
     completed='completed'
     cancelled='cancelled'
+class ReductionState(StrEnum):
+    pending='pending'
+    confirmed='confirmed'
+    rejected='rejected'

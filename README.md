@@ -10,7 +10,7 @@
 2. 隔离柜：同册只允许一个在柜位置，柜位满时拒绝入柜。出柜释放位置并保存出柜时间。
 3. 风险分级：Redis 排队、Python worker 执行决策树、主管复核；开工和交接只接受最新观测的复核。
 4. 修复工序：方案依序建立工序依赖，资金未占用不得施工；前置工序未完成不可跳步；未施工方案撤销后可修订恢复。
-5. 专项经费：预算、占用、实付分别记录；行锁保障并发不超支；撤销返还占款，核销不得超过已占金额。
+5. 专项经费：预算、占用、实付分别记录；行锁保障并发不超支；撤销返还占款，核销不得超过已占金额。临时减拨分两段：先出预案（不动占款，待确认时照常施工签证），确认时按最新签证与复测重算并整笔退回或保留占款，重复确认不重复退还。
 6. 出柜借展：霉面积为 0、含水≤60%、最新低风险复核、工序及经费完成才准出柜；先交库房才准借展。
 
 ## 快速启动
@@ -59,11 +59,17 @@ docker compose exec backend python -m src.seed
 | 认证与追踪 | JWT 三角色、动作审计、请求追踪与突发请求限制中间件 |
 | ML | NumPy / scikit-learn 决策树、分层留出评估 |
 
-`backend/src/models.py` 是关系模型，`schemas.py` 是输入契约；`catalog_service.py`、`isolation_service.py`、`risk_service.py`、`treatment_service.py`、`grant_service.py`、`handover_service.py` 分别维护六模块约束，`routes.py` 只映射权限和业务调用。建表在首次启动创建，适合独立演示库。
+`backend/src/models.py` 是关系模型，`schemas.py` 是输入契约；`catalog_service.py`、`isolation_service.py`、`risk_service.py`、`treatment_service.py`、`grant_service.py`、`reduction_service.py`、`handover_service.py` 分别维护业务约束，`routes.py` 只映射权限和业务调用。建表在首次启动创建，适合独立演示库。
+
+### 临时减拨口径
+
+专项经费临时下调预算时，已核销支出与已有施工签证的方案占款先列为保底，不参与退回。其余占用中的方案按各卷册最新病害观测重跑现有决策树分级，然后整笔取舍（不拆分金额）：先尽量多留高风险册，再尽量少退方案；放不下的方案整笔退回草案并释放占款。若保底已超过减拨目标，减拨直接驳回。
+
+减拨分「提出—确认」两段。提出只生成待确认预案，不改预算与占款，因此待确认期间工序签证、核销照常进行。确认时按卷册→方案→专项的加锁顺序重取最新签证与复测后重算；并发签证或复测会使预案重算，重复确认直接返回已确认结果，不会重复退还占款。经费页可发起与确认减拨，并查看减拨明细、退回草案的方案与可用余额。
 
 `frontend/src/pages/` 对应六模块；`components/folio-index.js` 复用卷册索引和选择器，`ledger.js` 复用表格与表单字段，`steps.js` 绘制真实工序依赖。`api/client.js` 统一请求，`stores/workspace.js` 持有会话与卷宗，`utils/format.js` 和 `utils/forms.js` 分别处理展示和可恢复表单状态。双字体是 Noto Serif SC 与 Noto Sans SC；网络不通时浏览器使用 serif / sans-serif 回退。
 
-共享枚举：后端 `backend/src/constants.py` 的 Role/FolioState/PlanState，分别在 seed 和模型默认值引用；前端 `frontend/src/constants/enums.js` 的 roles/folioStates/planStates 由外壳和页面引用。状态值逐一对应：operator/supervisor/viewer；registered/isolated/repair/released；draft/funded/completed/cancelled。风险值 low/medium/high 在算法与前端等级标签中一致。
+共享枚举：后端 `backend/src/constants.py` 的 Role/FolioState/PlanState/ReductionState，分别在 seed 和模型默认值引用；前端 `frontend/src/constants/enums.js` 的 roles/folioStates/planStates/reductionStates 由外壳和页面引用。状态值逐一对应：operator/supervisor/viewer；registered/isolated/repair/released；draft/funded/completed/cancelled；减拨 pending/confirmed/rejected。风险值 low/medium/high 在算法与前端等级标签中一致。
 
 ## 配置与开发
 
